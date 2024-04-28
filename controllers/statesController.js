@@ -61,16 +61,23 @@ exports.getRandomFunFact = async (req, res) => {
     const db = await getDb();
     const collection = db.collection('states');
 
+    // Fetch state info from JSON data
+    const stateInfo = statesData.find(s => s.code.toUpperCase() === state.toUpperCase());
+
+    if (!stateInfo) {
+        return res.status(404).send('State not found in JSON data');
+    }
+
     try {
         const stateData = await collection.findOne({ stateCode: state.toUpperCase() });
         if (!stateData) {
-            return res.status(404).send(`State not found`);
+            return res.status(404).send('State not found in database');
         }
         if (!stateData.funfacts || stateData.funfacts.length === 0) {
-            return res.status(404).json({ message: `No Fun Facts found for ${stateData.name}` });
+            return res.status(404).json({ message: `No Fun Facts found for ${stateInfo.state}` });
         }
         const funFact = stateData.funfacts[Math.floor(Math.random() * stateData.funfacts.length)];
-        res.json({ state: stateData.name, funfact: funFact });
+        res.json({ state: stateInfo.name, funfact: funFact });
     } catch (error) {
         console.error('Database query failed:', error);
         res.status(500).send('Database query failed');
@@ -97,11 +104,13 @@ exports.getNickname = (req, res) => {
 
 exports.getPopulation = (req, res) => {
     const { state } = req.params;
-    const stateData = statesData.find(s => s.code === state.toUpperCase());
+    const stateData = statesData.find(s => s.code.toUpperCase() === state.toUpperCase());
     if (!stateData) {
         return res.status(404).send('State not found');
     }
-    res.json({ state: stateData.state, population: stateData.population });
+    // Ensure population is a number and format it
+    const formattedPopulation = stateData.population.toLocaleString('en-US');
+    res.json({ state: stateData.state, population: formattedPopulation });
 };
 
 exports.getAdmissionDate = (req, res) => {
@@ -123,23 +132,25 @@ exports.addFunFact = async (req, res) => {
     const collection = db.collection('states');
 
     try {
-        // Find the document for the given state
-        const stateData = await collection.findOne({ stateCode: state.toUpperCase() });
+        // Upsert to either update existing or insert new document if not exist
+        const updateResult = await collection.updateOne(
+            { stateCode: state.toUpperCase() },
+            { $push: { funfacts: { $each: funfacts } } },
+            { upsert: true }
+        );
 
-        if (stateData) {
-            // Update the document by pushing new fun facts into the existing array
-            const updatedDocument = await collection.updateOne(
-                { stateCode: state.toUpperCase() },
-                { $push: { funfacts: { $each: funfacts } } }
-            );
-            res.json(updatedDocument);
-        } else {
-            // If no document exists, create a new document
-            const newDocument = await collection.insertOne({
-                stateCode: state.toUpperCase(),
-                funfacts: funfacts
+        // Fetch the updated document to return the full list of funfacts
+        const updatedStateData = await collection.findOne({ stateCode: state.toUpperCase() });
+
+        if (updatedStateData) {
+            res.json({
+                acknowledged: updateResult.acknowledged,
+                funfacts: updatedStateData.funfacts,
+                modifiedCount: updateResult.modifiedCount,
+                funfactsLength: updatedStateData.funfacts.length
             });
-            res.json(newDocument);
+        } else {
+            res.status(404).json({ message: "State not found after update." });
         }
     } catch (error) {
         console.error('Database query failed:', error);
@@ -155,19 +166,46 @@ exports.updateFunFact = async (req, res) => {
     const db = await getDb();
     const collection = db.collection('states');
 
-    try {
-        // Convert 1-based index to 0-based index for array access
-        const arrayIndex = index - 1;
-        const updateQuery = { $set: { [`funfacts.${arrayIndex}`]: funfact } };
+    // Fetch state info from JSON data
+    const stateInfo = statesData.find(s => s.code.toUpperCase() === state.toUpperCase());
 
+    if (!stateInfo) {
+        return res.status(404).send('State not found in JSON data');
+    }
+
+    try {
+        const stateData = await collection.findOne({ stateCode: state.toUpperCase() });
+
+        // No state data found at all
+        if (!stateData) {
+            return res.status(404).json({ message: `No Fun Facts found for ${stateInfo.state}` });
+        }
+
+        // State exists but has no fun facts
+        if (!stateData.funfacts || stateData.funfacts.length === 0) {
+            return res.status(404).json({ message: `No Fun Facts found for ${stateInfo.state}` });
+        }
+
+        // Check if the index is valid
+        const arrayIndex = index - 1; // Convert 1-based index to 0-based.
+        if (index < 1 || index > stateData.funfacts.length) {
+            return res.status(404).json({ message: `No Fun Fact found at that index for ${stateInfo.state}` });
+        }
+
+        // Perform the update
+        const updateQuery = { $set: { [`funfacts.${arrayIndex}`]: funfact } };
         const result = await collection.updateOne({ stateCode: state.toUpperCase() }, updateQuery);
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ error: "State not found or index out of bounds." });
-        }
-        if (result.modifiedCount === 0) {
-            return res.status(400).json({ error: "No update performed. Possible out of bounds index." });
-        }
-        res.json({result: result });
+
+        // Fetch the updated document to ensure fresh data is returned
+        const updatedStateData = await collection.findOne({ stateCode: state.toUpperCase() });
+
+        // Send the updated fun facts
+        res.json({
+            acknowledged: true,
+            state: state,
+            funfacts: updatedStateData.funfacts,
+            modifiedCount: result.modifiedCount
+        });
     } catch (error) {
         console.error('Database query failed:', error);
         res.status(500).send('Database operation failed');
@@ -182,15 +220,35 @@ exports.deleteFunFact = async (req, res) => {
     const db = await getDb();
     const collection = db.collection('states');
 
+    // Fetch state info from JSON data
+    const stateInfo = statesData.find(s => s.code.toUpperCase() === state.toUpperCase());
+    if (!stateInfo) {
+        return res.status(404).json({ message: `State not found in JSON data` });
+    }
+
     try {
+        // First, ensure the state data exists in the database
+        const stateData = await collection.findOne({ stateCode: state.toUpperCase() });
+        if (!stateData) {
+            return res.status(404).json({ message: `No Fun Facts found for ${stateInfo.state}` });
+        }
+
+        // State exists but has no fun facts or the index is out of range
+        if (!stateData.funfacts || stateData.funfacts.length === 0) {
+            return res.status(404).json({ message: `No Fun Facts found for ${stateInfo.state}` });
+        }
+        if (index < 1 || index > stateData.funfacts.length) {
+            return res.status(404).json({ message: `No Fun Fact found at that index for ${stateInfo.state}` });
+        }
+
         const arrayIndex = index - 1; // Convert 1-based index to 0-based for MongoDB operation
         const updateResult = await collection.updateOne(
             { stateCode: state.toUpperCase() },
-            { $unset: { [`funfacts.${arrayIndex}`]: 1 } } // Unset the funfact
+            { $unset: { [`funfacts.${arrayIndex}`]: "" } } // Unset the fun fact
         );
 
         // After unsetting an array element, it becomes null, so pull all nulls out
-        if (updateResult.matchedCount) {
+        if (updateResult.modifiedCount > 0) {
             await collection.updateOne(
                 { stateCode: state.toUpperCase() },
                 { $pull: { funfacts: null } } // Remove null entries from the array
@@ -198,12 +256,17 @@ exports.deleteFunFact = async (req, res) => {
         }
 
         if (updateResult.matchedCount === 0) {
-            res.status(404).json({ error: "State not found or index out of bounds." });
-        } else if (updateResult.modifiedCount === 0) {
-            res.status(400).json({ error: "No update performed. Possible out of bounds index." });
-        } else {
-            res.json({result: updateResult });
+            return res.status(404).json({ message: `No Fun Fact found at that index for ${stateInfo.state}` });
         }
+
+        // Fetch the updated document to ensure fresh data is returned
+        const updatedStateData = await collection.findOne({ stateCode: state.toUpperCase() });
+        res.json({
+            acknowledged: true,
+            state: stateInfo.state,
+            funfacts: updatedStateData.funfacts,
+            modifiedCount: updateResult.modifiedCount
+        });
     } catch (error) {
         console.error('Database query failed:', error);
         res.status(500).send('Database operation failed');
