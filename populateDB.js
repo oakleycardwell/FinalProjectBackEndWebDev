@@ -1,3 +1,5 @@
+// File used for refreshing the DB in between tests
+
 require('dotenv').config();
 const { getDb, connectToMongo, client } = require('./mongodb');
 const statesData = require('./models/statesData.json');
