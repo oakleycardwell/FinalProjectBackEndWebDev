@@ -4,10 +4,14 @@ const stateRoutes = require('./routes/stateRoutes');
 const { connectToMongo } = require('./mongodb');
 const {join} = require("path");
 const path = require("path");
+const cors = require('cors');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'views')));
+
+// Enable CORS for all routes and all origins
+app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 

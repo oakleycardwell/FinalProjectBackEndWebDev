@@ -167,7 +167,7 @@ exports.updateFunFact = async (req, res) => {
         if (result.modifiedCount === 0) {
             return res.status(400).json({ error: "No update performed. Possible out of bounds index." });
         }
-        res.json({ message: "Fun fact updated successfully.", result: result });
+        res.json({result: result });
     } catch (error) {
         console.error('Database query failed:', error);
         res.status(500).send('Database operation failed');
@@ -202,7 +202,7 @@ exports.deleteFunFact = async (req, res) => {
         } else if (updateResult.modifiedCount === 0) {
             res.status(400).json({ error: "No update performed. Possible out of bounds index." });
         } else {
-            res.json({ message: "Fun fact deleted successfully.", result: updateResult });
+            res.json({result: updateResult });
         }
     } catch (error) {
         console.error('Database query failed:', error);

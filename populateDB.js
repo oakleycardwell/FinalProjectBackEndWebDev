@@ -21,11 +21,18 @@ async function populateDatabase() {
         // Map through each state in the JSON file
         const insertPromises = statesData.map(state => {
             // Check if fun facts exist for this state, otherwise insert with empty array
-            const funfacts = funfactsData[state.code] || [];
-            return states.insertOne({
-                stateCode: state.code,
-                funfacts: funfacts
-            });
+            const funfacts = funfactsData[state.code] || null;
+            if (funfacts != null) {
+                return states.insertOne({
+                    stateCode: state.code,
+                    funfacts: funfacts
+                });
+            }
+            else{
+                return states.insertOne({
+                    stateCode: state.code
+                });
+            }
         });
 
         await Promise.all(insertPromises);
