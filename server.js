@@ -1,39 +1,33 @@
 require('dotenv').config();
 const express = require('express');
+const stateRoutes = require('./routes/stateRoutes');
+const { connectToMongo } = require('./mongodb');
+const {join} = require("path");
+const path = require("path");
+
 const app = express();
-const { MongoClient, ServerApiVersion } = require('mongodb');
-const uri = process.env.DATABASE_URI;
-
-app.use(express.json()); // Middleware for parsing JSON bodies
-
-app.get('/', (req, res) => {
-    res.send('Hello World!');
-});
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'views')));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+
+app.use('/states', stateRoutes);
+app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'views', 'home.html')); });
+
+// Handle 404 errors for any other undefined routes
+
+app.use((req, res, next) => {
+    res.status(404).sendFile(join(__dirname, 'views', '404.html'));
 });
 
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
+connectToMongo().catch(console.error);
+
+// Cleanup handler to close MongoDB connection on app termination
+process.on('SIGINT', async () => {
+    const { client } = require('./mongodb');
+    await client.close();
+    console.log('MongoDB connection closed due to app termination');
+    process.exit(0);
 });
-async function run() {
-    try {
-        // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
-        // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
-        // Ensures that the client will close when you finish/error
-        await client.close();
-    }
-}
-run().catch(console.dir);

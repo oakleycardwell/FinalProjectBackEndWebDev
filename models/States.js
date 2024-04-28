@@ -5,6 +5,6 @@ const stateSchema = new mongoose.Schema({
     funfacts: [String]
 });
 
-const State = mongoose.model('State', stateSchema);
+const States = mongoose.model('States', stateSchema);
 
-module.exports = State;
+module.exports = States;
