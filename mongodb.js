@@ -22,7 +22,7 @@ async function connectToMongo() {
 }
 
 function getDb() {
-    return client.db(dbName); // Replace with your DB name
+    return client.db(dbName);
 }
 
 module.exports = { connectToMongo, getDb, client };
